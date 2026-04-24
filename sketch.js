@@ -1,65 +1,61 @@
 /**
- * 3D原子モデルシミュレーション（学習用）
- * 操作方法:
- * [P]キー：陽子(赤)を追加
- * [N]キー：中性子(灰)を追加
- * [E]キー：電子(白)を追加
- * マウスドラッグ：視点回転
- * スクロール：拡大・縮小
+ * 原子モデル・学習シミュレーター（GitHub公開版）
  */
 
 let particles = [];
+let infoDiv, statusWindow;
+const elements = [
+  "n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", 
+  "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca"
+];
 
-// 物理定数の設定
-const COULOMB_CONST = 300;   // 静電気力（反発・引き合い）の強さ
-const STICK_DIST = 100;      // 核力が働き始める距離
-// 【修正】ターゲット距離を少し小さくして、粒子をめり込ませることで穴を埋める
-const TARGET_DIST = 32;      // 粒子がくっつく理想的な距離（少し小さくして、穴を埋める）
-const SPRING_CONST = 3;      // くっつく力の強さ
-// 【修正】摩擦を少し減らして、結合後に最適な位置に settles しやすくする
-const FRICTION = 0.93;       // 摩擦（原子核の安定用）
+// 物理定数
+const COULOMB_CONST = 300;
+const STICK_DIST = 100;
+const TARGET_DIST = 32;
+const SPRING_CONST = 3;
+const FRICTION = 0.93;
 
 function setup() {
-  // Chromebookでもスムーズに動くよう、画面サイズに合わせてキャンバスを作成
   createCanvas(windowWidth, windowHeight, WEBGL);
   
-  // 初期状態で陽子を1つ中央に配置
-  particles.push(new Particle(0, 0, 0, 'proton'));
+  // 初期配置：陽子1つ
+  addParticle('proton');
 
-  // 操作説明の表示（画面左上）
-  let info = createDiv('キー操作: [P]陽子 [N]中性子 [E]電子を追加<br>ドラッグで回転 / スクロールでズーム');
-  info.style('position', 'absolute');
-  info.style('top', '20px');
-  info.style('left', '20px');
-  info.style('color', '#ffffff');
-  info.style('font-family', 'sans-serif');
+  // UIの作成
+  createControlPanel();
+  createStatusWindow();
 }
 
 function draw() {
-  background(30); // 背景を暗いグレーに
-
-  // カメラ操作を有効化
+  background(30);
   orbitControl(); 
 
-  // 照明の設定（色飛びを防ぎ、立体感を出す）
   ambientLight(150); 
   pointLight(255, 255, 255, 200, -200, 300);
 
-  // 1. 各粒子の物理計算
+  let pCount = 0;
+  let nCount = 0;
+  let eCount = 0;
+
+  // 1. 物理計算
   for (let i = 0; i < particles.length; i++) {
     let p1 = particles[i];
     
-    // 中心に引き寄せる力（原子としてまとまりやすくする）
-    let toCenter = createVector(-p1.pos.x, -p1.pos.y, -p1.pos.z);
-    if (p1.type === 'electron') {
-      toCenter.normalize().mult(0.6); // 電子は中心に向かって回り続ける力
-    } else {
-      // 【修正】陽子・中性子を中心（穴を埋める方向）に少し強く引き寄せる
-      toCenter.mult(0.01); // 陽子・中性子は中央で出会うための緩やかな力
-    }
-    p1.applyForce(toCenter);
+    // カウント
+    if (p1.type === 'proton') pCount++;
+    if (p1.type === 'neutron') nCount++;
+    if (p1.type === 'electron') eCount++;
 
-    // 粒子同士の相互作用（2重ループ）
+    // 中心への引力
+    let towardCenter = createVector(-p1.pos.x, -p1.pos.y, -p1.pos.z);
+    if (p1.type === 'electron') {
+      towardCenter.normalize().mult(0.6);
+    } else {
+      towardCenter.mult(0.01);
+    }
+    p1.applyForce(towardCenter);
+
     for (let j = i + 1; j < particles.length; j++) {
       let p2 = particles[j];
       let force = calculateAtomicForces(p1, p2);
@@ -68,24 +64,114 @@ function draw() {
     }
   }
 
-  // 2. 更新と描画、及び安定性カウント
-  let protonCount = 0;
-  let neutronCount = 0;
-
-  for (let i = particles.length - 1; i >= 0; i--) {
-    let p = particles[i];
+  // 2. 更新と表示
+  for (let p of particles) {
     p.update();
     p.display();
-    
-    if (p.type === 'proton') protonCount++;
-    if (p.type === 'neutron') neutronCount++;
   }
   
-  // 3. 原子核の安定性チェック（中性子が少なすぎると崩壊）
-  checkStability(protonCount, neutronCount);
+  // 3. UIの更新
+  updateUI(pCount, nCount, eCount);
+  checkStability(pCount, nCount);
 }
 
-// 物理演算エンジン：粒子間の力を計算
+// --- UI作成関連 ---
+
+function createControlPanel() {
+  let panel = createDiv('');
+  panel.style('position', 'absolute');
+  panel.style('bottom', '20px');
+  panel.style('left', '50%');
+  panel.style('transform', 'translateX(-50%)');
+  panel.style('display', 'flex');
+  panel.style('gap', '10px');
+  panel.style('background', 'rgba(0,0,0,0.6)');
+  panel.style('padding', '15px');
+  panel.style('border-radius', '10px');
+
+  // 陽子ボタン
+  createGroup(panel, '陽子 (P)', 'proton', '#ff3232');
+  // 中性子ボタン
+  createGroup(panel, '中性子 (N)', 'neutron', '#969696');
+  // 電子ボタン
+  createGroup(panel, '電子 (e)', 'electron', '#ffffff');
+}
+
+function createGroup(parent, label, type, col) {
+  let container = createDiv('');
+  container.parent(parent);
+  container.style('text-align', 'center');
+  
+  let labelDiv = createDiv(label);
+  labelDiv.parent(container);
+  labelDiv.style('color', col);
+  labelDiv.style('margin-bottom', '5px');
+  labelDiv.style('font-weight', 'bold');
+
+  let btnAdd = createButton('＋ 追加');
+  btnAdd.parent(container);
+  btnAdd.mousePressed(() => addParticle(type));
+  
+  let btnRem = createButton('－ 除去');
+  btnRem.parent(container);
+  btnRem.mousePressed(() => removeParticle(type));
+}
+
+function createStatusWindow() {
+  statusWindow = createDiv('');
+  statusWindow.style('position', 'absolute');
+  statusWindow.style('top', '20px');
+  statusWindow.style('right', '20px');
+  statusWindow.style('width', '180px');
+  statusWindow.style('background', 'rgba(255,255,255,0.1)');
+  statusWindow.style('color', 'white');
+  statusWindow.style('padding', '20px');
+  statusWindow.style('border', '1px solid rgba(255,255,255,0.3)');
+  statusWindow.style('border-radius', '5px');
+  statusWindow.style('font-family', 'monospace');
+}
+
+function updateUI(p, n, e) {
+  let symbol = (p < elements.length) ? elements[p] : "??";
+  let charge = p - e;
+  let chargeText = charge > 0 ? `+${charge}` : charge === 0 ? "±0" : `${charge}`;
+  
+  statusWindow.html(`
+    <div style="font-size:12px; opacity:0.7;">ELEMENT STATUS</div>
+    <div style="font-size:48px; text-align:center; margin:10px 0;">${symbol}</div>
+    <hr style="opacity:0.3">
+    <div style="font-size:14px; line-height:1.6;">
+      原子番号 (Z): ${p}<br>
+      質量数 (A): ${p + n}<br>
+      中性子数 (N): ${n}<br>
+      電子数 (e): ${e}<br>
+      <span style="color:${charge === 0 ? '#44ff44' : '#ffcc44'}">
+        電荷: ${chargeText}
+      </span>
+    </div>
+  `);
+}
+
+// --- 粒子操作ロジック ---
+
+function addParticle(type) {
+  let pos = p5.Vector.random3D().mult(type === 'electron' ? 150 : 50);
+  let p = new Particle(pos.x, pos.y, pos.z, type);
+  if (type === 'electron') p.vel = createVector(0, 6, 3);
+  particles.push(p);
+}
+
+function removeParticle(type) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    if (particles[i].type === type) {
+      particles.splice(i, 1);
+      break;
+    }
+  }
+}
+
+// --- 物理計算・安定性 ---
+
 function calculateAtomicForces(p1, p2) {
   let forceDirection = p5.Vector.sub(p2.pos, p1.pos);
   let distance = forceDirection.mag();
@@ -95,69 +181,29 @@ function calculateAtomicForces(p1, p2) {
   let isNucleon1 = (p1.type === 'proton' || p1.type === 'neutron');
   let isNucleon2 = (p2.type === 'proton' || p2.type === 'neutron');
 
-  // 原子核の粒子同士（陽子・中性子）に働く強い核力のシミュレーション
   if (isNucleon1 && isNucleon2 && distance < STICK_DIST) {
-    // 理想的な距離(TARGET_DIST)に保とうとするバネの力
     let springForce = (TARGET_DIST - distance) * SPRING_CONST;
-    
-    // 【重要】多数の粒子が密集しても爆発しないよう、力に上限をかける
     springForce = constrain(springForce, -8, 8);
-    
     forceDirection.mult(springForce);
-
-    // 接触時にブルブル震えないようにブレーキをかける
     p1.vel.mult(0.85);
     p2.vel.mult(0.85);
-
     return forceDirection;
   }
 
-  // 電子や離れた陽子同士に働くクーロン力（電気的な反発・引力）
   let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (distance * distance);
   forceDirection.mult(cStrength);
   return forceDirection;
 }
 
-// 簡易的な原子核の安定性ルール
 function checkStability(z, n) {
-  let unstable = false;
-  // ヘリウム(z=2)以上で、中性子が陽子より明らかに少ない場合は不安定
-  if (z >= 2 && n < z - 0.5) unstable = true;
-  // 中性子が陽子の2倍を超えても不安定
-  if (n > z * 2 && z > 0) unstable = true;
-
-  if (unstable && frameCount % 60 === 0) { 
-    explode();
-  }
-}
-
-// 崩壊時の演出
-function explode() {
-  for (let p of particles) {
-    if (p.type !== 'electron') {
-      p.vel.add(p5.Vector.random3D().mult(25)); 
+  let unstable = (z >= 2 && n < z - 0.5) || (n > z * 2 && z > 0);
+  if (unstable && frameCount % 60 === 0) {
+    for (let p of particles) {
+      if (p.type !== 'electron') p.vel.add(p5.Vector.random3D().mult(15));
     }
   }
 }
 
-// キー入力による粒子追加
-function keyPressed() {
-  let pos = p5.Vector.random3D().mult(80); // 出現位置
-  if (key === 'p' || key === 'P') {
-    particles.push(new Particle(pos.x, pos.y, pos.z, 'proton'));
-  }
-  if (key === 'n' || key === 'N') {
-    particles.push(new Particle(pos.x, pos.y, pos.z, 'neutron'));
-  }
-  if (key === 'e' || key === 'E') {
-    // 電子は少し離れた場所から、初速を持って追加（周回しやすくするため）
-    let e = new Particle(150, 0, 0, 'electron');
-    e.vel = createVector(0, 6, 3);
-    particles.push(e);
-  }
-}
-
-// 粒子のクラス定義
 class Particle {
   constructor(x, y, z, type) {
     this.pos = createVector(x, y, z);
@@ -165,27 +211,24 @@ class Particle {
     this.acc = createVector(0, 0, 0);
     this.type = type;
 
-    // 種類ごとの色・大きさ・性質の設定
     if (type === 'proton') {
       this.charge = 1; this.mass = 10; this.radius = 18;
-      this.color = color(255, 50, 50); // 陽子：赤
+      this.color = color(255, 50, 50);
     } else if (type === 'neutron') {
       this.charge = 0; this.mass = 10; this.radius = 18;
-      this.color = color(150, 150, 150); // 中性子：グレー
+      this.color = color(150, 150, 150);
     } else if (type === 'electron') {
       this.charge = -1; this.mass = 1; this.radius = 6;
-      this.color = color(255, 255, 255); // 電子：白
+      this.color = color(255, 255, 255);
     }
   }
 
   applyForce(force) {
-    let f = p5.Vector.div(force, this.mass);
-    this.acc.add(f);
+    this.acc.add(p5.Vector.div(force, this.mass));
   }
 
   update() {
     this.vel.add(this.acc);
-    // 電子以外は摩擦で止まりやすくする（原子核の形成）
     if (this.type !== 'electron') this.vel.mult(FRICTION);
     this.pos.add(this.vel);
     this.acc.mult(0);
@@ -195,18 +238,13 @@ class Particle {
     push();
     translate(this.pos.x, this.pos.y, this.pos.z);
     noStroke();
-    
-    // 正しい色を表示するためのマテリアル設定
-    fill(this.color); 
-    ambientMaterial(this.color); 
-
-    // Chromebook負荷対策のため解像度(16)を抑えた球体
-    sphere(this.radius, 16, 16);
+    fill(this.color);
+    ambientMaterial(this.color);
+    sphere(this.radius, 12, 12);
     pop();
   }
 }
 
-// ブラウザのリサイズに対応
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
