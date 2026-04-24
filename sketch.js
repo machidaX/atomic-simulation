@@ -4,10 +4,40 @@
 
 let particles = [];
 let infoDiv, statusWindow;
+
+// Z=47（銀）まで対応できるよう元素リストを拡張
 const elements = [
   "n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", 
-  "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca"
+  "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
+  "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
+  "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr",
+  "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag"
 ];
+
+const elementsJa = [
+  "中性子", "水素", "ヘリウム", "リチウム", "ベリリウム", "ホウ素", "炭素", "窒素", "酸素", "フッ素", "ネオン", 
+  "ナトリウム", "マグネシウム", "アルミニウム", "ケイ素", "リン", "硫黄", "塩素", "アルゴン", "カリウム", "カルシウム",
+  "スカンジウム", "チタン", "バナジウム", "クロム", "マンガン", "鉄", "コバルト", "ニッケル", "銅", "亜鉛",
+  "ガリウム", "ゲルマニウム", "ヒ素", "セレン", "臭素", "クリプトン", "ルビジウム", "ストロンチウム", "イットリウム", "ジルコニウム",
+  "ニオブ", "モリブデン", "テクネチウム", "ルテニウム", "ロジウム", "パラジウム", "銀"
+];
+
+// 特定のイオン名の辞書
+const ionNames = {
+  "H+": "水素イオン",
+  "Li+": "リチウムイオン",
+  "O2-": "酸化物イオン",
+  "F-": "フッ化物イオン",
+  "Na+": "ナトリウムイオン",
+  "Mg2+": "マグネシウムイオン",
+  "Al3+": "アルミニウムイオン",
+  "Cl-": "塩化物イオン",
+  "K+": "カリウムイオン",
+  "Ca2+": "カルシウムイオン",
+  "Cu2+": "銅イオン",
+  "Zn2+": "亜鉛イオン",
+  "Ag+": "銀イオン"
+};
 
 // 物理定数
 const COULOMB_CONST = 300;
@@ -133,20 +163,50 @@ function createStatusWindow() {
 
 function updateUI(p, n, e) {
   let symbol = (p < elements.length) ? elements[p] : "??";
+  let nameJa = (p < elementsJa.length) ? elementsJa[p] : "未知の元素";
   let charge = p - e;
-  let chargeText = charge > 0 ? `+${charge}` : charge === 0 ? "±0" : `${charge}`;
   
+  // 電荷テキストとイオン式の生成
+  let chargeText;
+  let ionFormat; 
+  
+  if (charge > 0) {
+    chargeText = `${charge}+`;
+    ionFormat = `${symbol}${charge === 1 ? '+' : charge + '+'}`;
+  } else if (charge < 0) {
+    chargeText = `${Math.abs(charge)}-`;
+    ionFormat = `${symbol}${Math.abs(charge) === 1 ? '-' : Math.abs(charge) + '-'}`;
+  } else {
+    chargeText = "±0";
+    ionFormat = symbol;
+  }
+  
+  // 状態の判定
+  let stateText = "";
+  if (charge === 0 && p > 0) {
+    stateText = `${nameJa}原子`;
+  } else if (ionNames[ionFormat]) {
+    stateText = ionNames[ionFormat];
+  } else if (p > 0) {
+    stateText = charge > 0 ? "陽イオン" : "陰イオン";
+  }
+  
+  // 指定された順序でHTMLを構成
   statusWindow.html(`
     <div style="font-size:12px; opacity:0.7;">原子</div>
     <div style="font-size:48px; text-align:center; margin:10px 0;">${symbol}</div>
     <hr style="opacity:0.3">
     <div style="font-size:14px; line-height:1.6;">
       原子番号: ${p}<br>
-      質量数: ${p + n}<br>
+      陽子数: ${p}<br>
       中性子数: ${n}<br>
       電子数: ${e}<br>
+      質量数: ${p + n}<br>
       <span style="color:${charge === 0 ? '#44ff44' : '#ffcc44'}">
         帯びている電気: ${chargeText}
+      </span><br>
+      <span style="color:#00ffff; font-weight:bold; display:block; margin-top:5px;">
+        状態: ${stateText}
       </span>
     </div>
   `);
