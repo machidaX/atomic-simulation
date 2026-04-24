@@ -137,16 +137,16 @@ function updateUI(p, n, e) {
   let chargeText = charge > 0 ? `+${charge}` : charge === 0 ? "±0" : `${charge}`;
   
   statusWindow.html(`
-    <div style="font-size:12px; opacity:0.7;">ELEMENT STATUS</div>
+    <div style="font-size:12px; opacity:0.7;">原子</div>
     <div style="font-size:48px; text-align:center; margin:10px 0;">${symbol}</div>
     <hr style="opacity:0.3">
     <div style="font-size:14px; line-height:1.6;">
-      原子番号 (Z): ${p}<br>
-      質量数 (A): ${p + n}<br>
-      中性子数 (N): ${n}<br>
-      電子数 (e): ${e}<br>
+      原子番号: ${p}<br>
+      質量数: ${p + n}<br>
+      中性子数: ${n}<br>
+      電子数: ${e}<br>
       <span style="color:${charge === 0 ? '#44ff44' : '#ffcc44'}">
-        電荷: ${chargeText}
+        帯びている電気: ${chargeText}
       </span>
     </div>
   `);
