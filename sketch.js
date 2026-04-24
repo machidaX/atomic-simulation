@@ -11,7 +11,7 @@ const elements = [
   "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
   "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
   "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr",
-  "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag"
+  "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn"
 ];
 
 const elementsJa = [
@@ -19,7 +19,7 @@ const elementsJa = [
   "ナトリウム", "マグネシウム", "アルミニウム", "ケイ素", "リン", "硫黄", "塩素", "アルゴン", "カリウム", "カルシウム",
   "スカンジウム", "チタン", "バナジウム", "クロム", "マンガン", "鉄", "コバルト", "ニッケル", "銅", "亜鉛",
   "ガリウム", "ゲルマニウム", "ヒ素", "セレン", "臭素", "クリプトン", "ルビジウム", "ストロンチウム", "イットリウム", "ジルコニウム",
-  "ニオブ", "モリブデン", "テクネチウム", "ルテニウム", "ロジウム", "パラジウム", "銀"
+  "ニオブ", "モリブデン", "テクネチウム", "ルテニウム", "ロジウム", "パラジウム", "銀", "カドミウム", "インジウム", "スズ"
 ];
 
 // 特定のイオン名の辞書
@@ -43,10 +43,7 @@ const ionNames = {
 
 // 物理定数
 const COULOMB_CONST = 300;
-const STICK_DIST = 100;
-const TARGET_DIST = 32;
-const SPRING_CONST = 3;
-const FRICTION = 0.93;
+const FRICTION = 0.85; 
 
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
@@ -79,12 +76,29 @@ function draw() {
     if (p1.type === 'neutron') nCount++;
     if (p1.type === 'electron') eCount++;
 
-    // 中心への引力
+    // 中心への引力（核種と電子で挙動を変える）
     let towardCenter = createVector(-p1.pos.x, -p1.pos.y, -p1.pos.z);
+    let distFromCenter = towardCenter.mag();
+    
     if (p1.type === 'electron') {
-      towardCenter.normalize().mult(0.6);
+      if (distFromCenter > 0) towardCenter.normalize();
+      
+      // 【周回動作調整】跳ね返りを抑え、滑らかに周回させるための力（径方向ダンピング）
+      let radialVec = towardCenter.copy().mult(-1); 
+      let radialVelScalar = p1.vel.dot(radialVec); 
+      let radialDampingForce = radialVec.copy().mult(-radialVelScalar * 0.3); 
+      p1.applyForce(radialDampingForce);
+
+      if (distFromCenter > 250) {
+        // 飛び散り防止領域 (r > 250) -> 強めに中心へ引き戻す
+        towardCenter.mult(1.5); 
+      } else {
+        // 安定軌道領域 -> クーロン引力に任せるため、中心強制引力はごくわずかにする
+        towardCenter.mult(0.05); 
+      }
     } else {
-      towardCenter.mult(0.01);
+      // 原子核の中心への引力
+      towardCenter.mult(0.015); 
     }
     p1.applyForce(towardCenter);
 
@@ -121,11 +135,8 @@ function createControlPanel() {
   panel.style('padding', '15px');
   panel.style('border-radius', '10px');
 
-  // 陽子ボタン
   createGroup(panel, '陽子 (p<sup>+</sup>)', 'proton', '#ff3232');
-  // 中性子ボタン
   createGroup(panel, '中性子 (n)', 'neutron', '#969696');
-  // 電子ボタン（e-のマイナスを上付き文字に変更）
   createGroup(panel, '電子 (e<sup>-</sup>)', 'electron', '#ffffff');
 }
 
@@ -168,10 +179,9 @@ function updateUI(p, n, e) {
   let nameJa = (p < elementsJa.length) ? elementsJa[p] : "未知の元素";
   let charge = p - e;
   
-  // 電荷テキストとイオン式の生成
   let chargeText;
-  let ionFormat;     // 辞書判定用
-  let displaySymbol; // 画面表示用（上付き文字）
+  let ionFormat;     
+  let displaySymbol; 
   
   if (charge > 0) {
     chargeText = `${charge}+`;
@@ -189,7 +199,6 @@ function updateUI(p, n, e) {
     displaySymbol = symbol;
   }
   
-  // 状態の判定
   let stateText = "";
   if (charge === 0 && p > 0) {
     stateText = `${nameJa}原子`;
@@ -199,7 +208,6 @@ function updateUI(p, n, e) {
     stateText = charge > 0 ? "陽イオン" : "陰イオン";
   }
   
-  // 指定された順序でHTMLを構成
   statusWindow.html(`
     <div style="font-size:12px; opacity:0.7;">原子</div>
     <div style="font-size:48px; text-align:center; margin:10px 0;">${displaySymbol}</div>
@@ -223,9 +231,13 @@ function updateUI(p, n, e) {
 // --- 粒子操作ロジック ---
 
 function addParticle(type) {
-  let pos = p5.Vector.random3D().mult(type === 'electron' ? 150 : 50);
+  let pos = p5.Vector.random3D().mult(type === 'electron' ? 100 : 60);
   let p = new Particle(pos.x, pos.y, pos.z, type);
-  if (type === 'electron') p.vel = createVector(0, 6, 3);
+  // 初期速度。接線方向に初速を与えて周回しやすくする
+  if (type === 'electron') {
+    let velDir = p5.Vector.random3D();
+    p.vel = velDir.cross(pos).normalize().mult(8);
+  }
   particles.push(p);
 }
 
@@ -249,16 +261,31 @@ function calculateAtomicForces(p1, p2) {
   let isNucleon1 = (p1.type === 'proton' || p1.type === 'neutron');
   let isNucleon2 = (p2.type === 'proton' || p2.type === 'neutron');
 
-  if (isNucleon1 && isNucleon2 && distance < STICK_DIST) {
-    let springForce = (TARGET_DIST - distance) * SPRING_CONST;
-    springForce = constrain(springForce, -8, 8);
-    forceDirection.mult(springForce);
-    p1.vel.mult(0.85);
-    p2.vel.mult(0.85);
-    return forceDirection;
+  // 核子同士（陽子・中性子）の相互作用
+  if (isNucleon1 && isNucleon2) {
+    let diam = p1.radius + p2.radius; 
+    let interactionRange = diam * 1.8; 
+    
+    if (distance < interactionRange) {
+      let forceMag = 0;
+      if (distance < diam) {
+        forceMag = (diam - distance) * 1.5; 
+      } else {
+        forceMag = (diam - distance) * 0.25; 
+      }
+      
+      forceMag = constrain(forceMag, -8, 30);
+      forceDirection.mult(forceMag);
+      
+      return forceDirection;
+    }
+    return createVector(0, 0, 0); 
   }
 
-  let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (distance * distance);
+  // 電子と他の粒子（原子核・電子同士）のクーロン力
+  // 極端に近づいた際のスイングバイを防ぐため、計算上の距離の下限を設ける
+  let calcDist = max(distance, 35); 
+  let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (calcDist * calcDist);
   forceDirection.mult(cStrength);
   return forceDirection;
 }
@@ -267,7 +294,7 @@ function checkStability(z, n) {
   let unstable = (z >= 2 && n < z - 0.5) || (n > z * 2 && z > 0);
   if (unstable && frameCount % 60 === 0) {
     for (let p of particles) {
-      if (p.type !== 'electron') p.vel.add(p5.Vector.random3D().mult(15));
+      if (p.type !== 'electron') p.vel.add(p5.Vector.random3D().mult(10));
     }
   }
 }
@@ -297,7 +324,18 @@ class Particle {
 
   update() {
     this.vel.add(this.acc);
-    if (this.type !== 'electron') this.vel.mult(FRICTION);
+    if (this.type !== 'electron') {
+      // 核子は摩擦で中心に集まる
+      this.vel.mult(FRICTION); 
+    } else {
+      // 電子は摩擦をなくし、常に「速度8」を保つようにオートクルーズする
+      let speed = this.vel.mag();
+      let targetSpeed = 8;
+      if (speed > 0.1) {
+        // 現在の速度と目標速度の差分を埋めるように調整（急激な加速や減速を防ぐ）
+        this.vel.setMag(speed + (targetSpeed - speed) * 0.1);
+      }
+    }
     this.pos.add(this.vel);
     this.acc.mult(0);
   }
