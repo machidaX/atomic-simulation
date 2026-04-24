@@ -31,9 +31,11 @@ const ionNames = {
   "Na+": "ナトリウムイオン",
   "Mg2+": "マグネシウムイオン",
   "Al3+": "アルミニウムイオン",
+  "S-": "硫化物イオン",
   "Cl-": "塩化物イオン",
   "K+": "カリウムイオン",
   "Ca2+": "カルシウムイオン",
+  "Ba2+": "バリウムイオン",
   "Cu2+": "銅イオン",
   "Zn2+": "亜鉛イオン",
   "Ag+": "銀イオン"
@@ -120,11 +122,11 @@ function createControlPanel() {
   panel.style('border-radius', '10px');
 
   // 陽子ボタン
-  createGroup(panel, '陽子 (P)', 'proton', '#ff3232');
+  createGroup(panel, '陽子 (p<sup>+</sup>)', 'proton', '#ff3232');
   // 中性子ボタン
-  createGroup(panel, '中性子 (N)', 'neutron', '#969696');
-  // 電子ボタン
-  createGroup(panel, '電子 (e)', 'electron', '#ffffff');
+  createGroup(panel, '中性子 (n)', 'neutron', '#969696');
+  // 電子ボタン（e-のマイナスを上付き文字に変更）
+  createGroup(panel, '電子 (e<sup>-</sup>)', 'electron', '#ffffff');
 }
 
 function createGroup(parent, label, type, col) {
