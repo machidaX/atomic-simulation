@@ -168,17 +168,23 @@ function updateUI(p, n, e) {
   
   // 電荷テキストとイオン式の生成
   let chargeText;
-  let ionFormat; 
+  let ionFormat;     // 辞書判定用
+  let displaySymbol; // 画面表示用（上付き文字）
   
   if (charge > 0) {
     chargeText = `${charge}+`;
-    ionFormat = `${symbol}${charge === 1 ? '+' : charge + '+'}`;
+    let chargeStr = charge === 1 ? '+' : charge + '+';
+    ionFormat = `${symbol}${chargeStr}`;
+    displaySymbol = `${symbol}<sup style="font-size:0.6em;">${chargeStr}</sup>`;
   } else if (charge < 0) {
     chargeText = `${Math.abs(charge)}-`;
-    ionFormat = `${symbol}${Math.abs(charge) === 1 ? '-' : Math.abs(charge) + '-'}`;
+    let chargeStr = Math.abs(charge) === 1 ? '-' : Math.abs(charge) + '-';
+    ionFormat = `${symbol}${chargeStr}`;
+    displaySymbol = `${symbol}<sup style="font-size:0.6em;">${chargeStr}</sup>`;
   } else {
     chargeText = "±0";
     ionFormat = symbol;
+    displaySymbol = symbol;
   }
   
   // 状態の判定
@@ -194,7 +200,7 @@ function updateUI(p, n, e) {
   // 指定された順序でHTMLを構成
   statusWindow.html(`
     <div style="font-size:12px; opacity:0.7;">原子</div>
-    <div style="font-size:48px; text-align:center; margin:10px 0;">${symbol}</div>
+    <div style="font-size:48px; text-align:center; margin:10px 0;">${displaySymbol}</div>
     <hr style="opacity:0.3">
     <div style="font-size:14px; line-height:1.6;">
       原子番号: ${p}<br>
