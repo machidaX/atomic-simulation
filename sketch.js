@@ -4,8 +4,11 @@
 
 let particles = [];
 let infoDiv, statusWindow;
+let ptContainer;
+let ptCells = {}; // 周期表のセルを格納
+let nuclearUnstable = false; // 原子核が不安定かどうかを保持するフラグ
 
-// Z=47（銀）まで対応できるよう元素リストを拡張
+// Z=47（銀）まで対応できるよう元素リストを拡張（表示の都合上スズまで50個）
 const elements = [
   "n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", 
   "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
@@ -54,11 +57,15 @@ function setup() {
   // UIの作成
   createControlPanel();
   createStatusWindow();
+  createPeriodicTable(); // 周期表UIの生成
 }
 
 function draw() {
   background(30);
   orbitControl(); 
+  
+  // 画面右側にステータスや周期表UIがあるため、3Dオブジェクト全体を少し左にずらす
+  translate(-100, 0, 0);
 
   ambientLight(150); 
   pointLight(255, 255, 255, 200, -200, 300);
@@ -110,6 +117,9 @@ function draw() {
     }
   }
 
+  // 原子核の安定性フラグを更新（不安定ルール）
+  nuclearUnstable = (pCount >= 2 && nCount < pCount - 0.5) || (nCount > pCount * 2 && pCount > 0);
+
   // 2. 更新と表示
   for (let p of particles) {
     p.update();
@@ -118,7 +128,7 @@ function draw() {
   
   // 3. UIの更新
   updateUI(pCount, nCount, eCount);
-  checkStability(pCount, nCount);
+  checkStability(pCount, nCount); // 不安定時の拍動演出
 }
 
 // --- UI作成関連 ---
@@ -127,7 +137,7 @@ function createControlPanel() {
   let panel = createDiv('');
   panel.style('position', 'absolute');
   panel.style('bottom', '20px');
-  panel.style('left', '50%');
+  panel.style('left', '35%'); // 右の周期表のために少し左へ
   panel.style('transform', 'translateX(-50%)');
   panel.style('display', 'flex');
   panel.style('gap', '10px');
@@ -174,6 +184,73 @@ function createStatusWindow() {
   statusWindow.style('font-family', 'monospace');
 }
 
+// 周期表の作成（右下）
+function createPeriodicTable() {
+  ptContainer = createDiv('');
+  ptContainer.style('position', 'absolute');
+  ptContainer.style('bottom', '20px');
+  ptContainer.style('right', '20px');
+  ptContainer.style('display', 'grid');
+  ptContainer.style('grid-template-columns', 'repeat(18, 24px)'); // 18族
+  ptContainer.style('gap', '2px');
+  ptContainer.style('background', 'rgba(0,0,0,0.6)');
+  ptContainer.style('padding', '10px');
+  ptContainer.style('border-radius', '8px');
+
+  // 原子番号からグリッド位置(行, 列)をマッピング（スズまで50個）
+  const layout = [
+    [1, 1, 1], [2, 1, 18], // Z=1,2 (H, He)
+    [3, 2, 1], [4, 2, 2], [5, 2, 13], [6, 2, 14], [7, 2, 15], [8, 2, 16], [9, 2, 17], [10, 2, 18], // Z=3-10
+    [11, 3, 1], [12, 3, 2], [13, 3, 13], [14, 3, 14], [15, 3, 15], [16, 3, 16], [17, 3, 17], [18, 3, 18], // Z=11-18
+    ...Array.from({length: 18}, (_, i) => [19 + i, 4, i + 1]), // Z=19-36
+    ...Array.from({length: 14}, (_, i) => [37 + i, 5, i + 1])  // Z=37-50 (Snまで)
+  ];
+
+  for (let [z, r, c] of layout) {
+    let cell = createDiv(elements[z]);
+    cell.style('grid-row', r);
+    cell.style('grid-column', c);
+    cell.style('display', 'flex');
+    cell.style('align-items', 'center');
+    cell.style('justify-content', 'center');
+    cell.style('font-size', '11px');
+    cell.style('font-family', 'sans-serif');
+    cell.style('width', '24px');
+    cell.style('height', '24px');
+    cell.style('color', '#666');
+    cell.style('background', 'rgba(255,255,255,0.05)');
+    cell.style('border', '1px solid rgba(255,255,255,0.1)');
+    cell.style('border-radius', '3px');
+    cell.style('transition', '0.3s all');
+    cell.style('box-sizing', 'border-box');
+
+    ptCells[z] = cell; // Z番号で保存しておく
+    cell.parent(ptContainer);
+  }
+}
+
+// 安定性の情報を取得
+function getStabilityInfo(p, n) {
+  // 原子核が不安定かどうかのフラグはdrawで更新されている
+  if (nuclearUnstable) {
+    return {
+      text: "☢️不安定☢️",
+      color: "#ff4444" // 赤
+    };
+  } else if (p > 0) {
+    return {
+      text: "安定",
+      color: "#44ff44" // 緑
+    };
+  } else {
+    // 陽子が0個のときは「安定」とは表示しない
+    return {
+      text: "",
+      color: "white"
+    };
+  }
+}
+
 function updateUI(p, n, e) {
   let symbol = (p < elements.length) ? elements[p] : "??";
   let nameJa = (p < elementsJa.length) ? elementsJa[p] : "未知の元素";
@@ -207,9 +284,16 @@ function updateUI(p, n, e) {
   } else if (p > 0) {
     stateText = charge > 0 ? "陽イオン" : "陰イオン";
   }
+
+  // 安定性の情報を取得
+  let stabilityInfo = getStabilityInfo(p, n);
   
+  // 指定された順序でHTMLを構成
   statusWindow.html(`
-    <div style="font-size:12px; opacity:0.7;">原子</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+      <span style="opacity:0.7;">原子</span>
+      <span style="color:${stabilityInfo.color}; font-weight:bold; letter-spacing:-0.5px;">${stabilityInfo.text}</span>
+    </div>
     <div style="font-size:48px; text-align:center; margin:10px 0;">${displaySymbol}</div>
     <hr style="opacity:0.3">
     <div style="font-size:14px; line-height:1.6;">
@@ -226,11 +310,37 @@ function updateUI(p, n, e) {
       </span>
     </div>
   `);
+
+  // --- 周期表のライトアップ処理 ---
+  // 電荷が0の「原子」のときだけ点灯させる
+  let isNeutralAtom = (p > 0 && charge === 0);
+
+  // 一旦すべてのセルの色をリセット
+  for (let z in ptCells) {
+    if (isNeutralAtom && Number(z) === p) {
+      // 該当する原子が完成したとき（ネオンサインのように光る）
+      ptCells[z].style('background', '#44ff44');
+      ptCells[z].style('color', '#000');
+      ptCells[z].style('border-color', '#44ff44');
+      ptCells[z].style('box-shadow', '0 0 10px #44ff44');
+      ptCells[z].style('font-weight', 'bold');
+      ptCells[z].style('transform', 'scale(1.1)');
+    } else {
+      // それ以外（未完成、またはイオン）は消灯
+      ptCells[z].style('background', 'rgba(255,255,255,0.05)');
+      ptCells[z].style('color', '#666');
+      ptCells[z].style('border-color', 'rgba(255,255,255,0.1)');
+      ptCells[z].style('box-shadow', 'none');
+      ptCells[z].style('font-weight', 'normal');
+      ptCells[z].style('transform', 'scale(1.0)');
+    }
+  }
 }
 
 // --- 粒子操作ロジック ---
 
 function addParticle(type) {
+  // 核子と電子で出現位置を散らす
   let pos = p5.Vector.random3D().mult(type === 'electron' ? 100 : 60);
   let p = new Particle(pos.x, pos.y, pos.z, type);
   // 初期速度。接線方向に初速を与えて周回しやすくする
@@ -261,7 +371,7 @@ function calculateAtomicForces(p1, p2) {
   let isNucleon1 = (p1.type === 'proton' || p1.type === 'neutron');
   let isNucleon2 = (p2.type === 'proton' || p2.type === 'neutron');
 
-  // 核子同士（陽子・中性子）の相互作用
+  // 核子同士（陽子・中性子）の相互作用（桑の実モデル・斥力強化）
   if (isNucleon1 && isNucleon2) {
     let diam = p1.radius + p2.radius; 
     let interactionRange = diam * 1.8; 
@@ -269,11 +379,14 @@ function calculateAtomicForces(p1, p2) {
     if (distance < interactionRange) {
       let forceMag = 0;
       if (distance < diam) {
+        // 重なっている場合は反発して押し出し、体積を確保する
         forceMag = (diam - distance) * 1.5; 
       } else {
-        forceMag = (diam - distance) * 0.25; 
+        // 表面同士が近い場合は引力でくっつく
+        forceMag = (diam - distance) * 0.25; // negative value
       }
       
+      // 不安定な場合に振動を誘発するように、反発力の最大値を大きく設定 (image_1.pngのSn50+などを考慮)
       forceMag = constrain(forceMag, -8, 30);
       forceDirection.mult(forceMag);
       
@@ -290,11 +403,14 @@ function calculateAtomicForces(p1, p2) {
   return forceDirection;
 }
 
+// 不安定時の拍動演出
 function checkStability(z, n) {
-  let unstable = (z >= 2 && n < z - 0.5) || (n > z * 2 && z > 0);
-  if (unstable && frameCount % 60 === 0) {
+  if (nuclearUnstable && frameCount % 60 === 0) {
+    // 不安定判定ルールに該当する場合、1秒に1回、突発的な力を与える
     for (let p of particles) {
-      if (p.type !== 'electron') p.vel.add(p5.Vector.random3D().mult(10));
+      if (p.type !== 'electron') {
+        p.vel.add(p5.Vector.random3D().mult(10));
+      }
     }
   }
 }
@@ -308,13 +424,13 @@ class Particle {
 
     if (type === 'proton') {
       this.charge = 1; this.mass = 10; this.radius = 18;
-      this.color = color(255, 50, 50);
+      this.color = color(255, 50, 50); // 赤
     } else if (type === 'neutron') {
       this.charge = 0; this.mass = 10; this.radius = 18;
-      this.color = color(150, 150, 150);
+      this.color = color(150, 150, 150); // グレー
     } else if (type === 'electron') {
       this.charge = -1; this.mass = 1; this.radius = 6;
-      this.color = color(255, 255, 255);
+      this.color = color(255, 255, 255); // 白
     }
   }
 
@@ -328,11 +444,10 @@ class Particle {
       // 核子は摩擦で中心に集まる
       this.vel.mult(FRICTION); 
     } else {
-      // 電子は摩擦をなくし、常に「速度8」を保つようにオートクルーズする
+      // 電子は常に「速度8」を保つようにオートクルーズする
       let speed = this.vel.mag();
       let targetSpeed = 8;
       if (speed > 0.1) {
-        // 現在の速度と目標速度の差分を埋めるように調整（急激な加速や減速を防ぐ）
         this.vel.setMag(speed + (targetSpeed - speed) * 0.1);
       }
     }
@@ -344,8 +459,16 @@ class Particle {
     push();
     translate(this.pos.x, this.pos.y, this.pos.z);
     noStroke();
-    fill(this.color);
-    ambientMaterial(this.color);
+    
+    // 不安定判定の視覚演出（原子核の点滅）
+    let currentColor = this.color;
+    if (nuclearUnstable && this.type !== 'electron' && frameCount % 30 < 15) {
+      // 不安定な場合、核子を一時的に黄色く光らせて点滅させる
+      currentColor = color(255, 255, 0); // 黄色
+    }
+    
+    fill(currentColor);
+    ambientMaterial(currentColor);
     sphere(this.radius, 12, 12);
     pop();
   }
