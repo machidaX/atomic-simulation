@@ -5,10 +5,11 @@
 let particles = [];
 let infoDiv, statusWindow;
 let ptContainer;
-let ptCells = {}; // 周期表のセルを格納
-let nuclearUnstable = false; // 原子核が不安定かどうかを保持するフラグ
+let ptCells = {}; 
+let nuclearUnstable = false; 
+let unstableFrames = 0; 
+let decayCounter = 1; 
 
-// Z=47（銀）まで対応できるよう元素リストを拡張（表示の都合上スズまで50個）
 const elements = [
   "n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", 
   "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
@@ -25,46 +26,28 @@ const elementsJa = [
   "ニオブ", "モリブデン", "テクネチウム", "ルテニウム", "ロジウム", "パラジウム", "銀", "カドミウム", "インジウム", "スズ"
 ];
 
-// 特定のイオン名の辞書
 const ionNames = {
-  "H+": "水素イオン",
-  "Li+": "リチウムイオン",
-  "O2-": "酸化物イオン",
-  "F-": "フッ化物イオン",
-  "Na+": "ナトリウムイオン",
-  "Mg2+": "マグネシウムイオン",
-  "Al3+": "アルミニウムイオン",
-  "S2-": "硫化物イオン",
-  "Cl-": "塩化物イオン",
-  "K+": "カリウムイオン",
-  "Ca2+": "カルシウムイオン",
-  "Ba2+": "バリウムイオン",
-  "Cu2+": "銅イオン",
-  "Zn2+": "亜鉛イオン",
-  "Ag+": "銀イオン"
+  "H+": "水素イオン", "Li+": "リチウムイオン", "O2-": "酸化物イオン",
+  "F-": "フッ化物イオン", "Na+": "ナトリウムイオン", "Mg2+": "マグネシウムイオン",
+  "Al3+": "アルミニウムイオン", "S2-": "硫化物イオン", "Cl-": "塩化物イオン",
+  "K+": "カリウムイオン", "Ca2+": "カルシウムイオン", "Ba2+": "バリウムイオン",
+  "Cu2+": "銅イオン", "Zn2+": "亜鉛イオン", "Ag+": "銀イオン"
 };
 
-// 物理定数
 const COULOMB_CONST = 300;
 const FRICTION = 0.85; 
 
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
-  
-  // 初期配置：陽子1つ
   addParticle('proton');
-
-  // UIの作成
   createControlPanel();
   createStatusWindow();
-  createPeriodicTable(); // 周期表UIの生成
+  createPeriodicTable();
 }
 
 function draw() {
   background(30);
   orbitControl(); 
-  
-  // 画面右側にステータスや周期表UIがあるため、3Dオブジェクト全体を少し左にずらす
   translate(-100, 0, 0);
 
   ambientLight(150); 
@@ -74,40 +57,36 @@ function draw() {
   let nCount = 0;
   let eCount = 0;
 
-  // 1. 物理計算
   for (let i = 0; i < particles.length; i++) {
     let p1 = particles[i];
     
-    // カウント
-    if (p1.type === 'proton') pCount++;
-    if (p1.type === 'neutron') nCount++;
-    if (p1.type === 'electron') eCount++;
+    if (!p1.isEjected) {
+      if (p1.type === 'proton') pCount++;
+      if (p1.type === 'neutron') nCount++;
+      if (p1.type === 'electron') eCount++;
+    }
 
-    // 中心への引力（核種と電子で挙動を変える）
     let towardCenter = createVector(-p1.pos.x, -p1.pos.y, -p1.pos.z);
     let distFromCenter = towardCenter.mag();
     
-    if (p1.type === 'electron') {
-      if (distFromCenter > 0) towardCenter.normalize();
-      
-      // 【周回動作調整】跳ね返りを抑え、滑らかに周回させるための力（径方向ダンピング）
-      let radialVec = towardCenter.copy().mult(-1); 
-      let radialVelScalar = p1.vel.dot(radialVec); 
-      let radialDampingForce = radialVec.copy().mult(-radialVelScalar * 0.3); 
-      p1.applyForce(radialDampingForce);
+    if (!p1.isEjected) {
+      if (p1.type === 'electron' || p1.type === 'positron') {
+        if (distFromCenter > 0) towardCenter.normalize();
+        let radialVec = towardCenter.copy().mult(-1); 
+        let radialVelScalar = p1.vel.dot(radialVec); 
+        let radialDampingForce = radialVec.copy().mult(-radialVelScalar * 0.3); 
+        p1.applyForce(radialDampingForce);
 
-      if (distFromCenter > 250) {
-        // 飛び散り防止領域 (r > 250) -> 強めに中心へ引き戻す
-        towardCenter.mult(1.5); 
+        if (distFromCenter > 250) {
+          towardCenter.mult(1.5); 
+        } else {
+          towardCenter.mult(0.05); 
+        }
       } else {
-        // 安定軌道領域 -> クーロン引力に任せるため、中心強制引力はごくわずかにする
-        towardCenter.mult(0.05); 
+        towardCenter.mult(0.015); 
       }
-    } else {
-      // 原子核の中心への引力
-      towardCenter.mult(0.015); 
+      p1.applyForce(towardCenter);
     }
-    p1.applyForce(towardCenter);
 
     for (let j = i + 1; j < particles.length; j++) {
       let p2 = particles[j];
@@ -117,18 +96,22 @@ function draw() {
     }
   }
 
-  // 原子核の安定性フラグを更新（不安定ルール）
   nuclearUnstable = (pCount >= 2 && nCount < pCount - 0.5) || (nCount > pCount * 2 && pCount > 0);
 
-  // 2. 更新と表示
   for (let p of particles) {
     p.update();
     p.display();
   }
   
-  // 3. UIの更新
+  // 【修正】一定距離（1000）離れたら静止せずに完全に消去する
+  for (let i = particles.length - 1; i >= 0; i--) {
+    if (particles[i].isEjected && particles[i].pos.mag() > 1000) {
+      particles.splice(i, 1);
+    }
+  }
+
   updateUI(pCount, nCount, eCount);
-  checkStability(pCount, nCount); // 不安定時の拍動演出
+  checkDecay(pCount, nCount); 
 }
 
 // --- UI作成関連 ---
@@ -137,7 +120,7 @@ function createControlPanel() {
   let panel = createDiv('');
   panel.style('position', 'absolute');
   panel.style('bottom', '20px');
-  panel.style('left', '35%'); // 右の周期表のために少し左へ
+  panel.style('left', '35%'); 
   panel.style('transform', 'translateX(-50%)');
   panel.style('display', 'flex');
   panel.style('gap', '10px');
@@ -184,26 +167,24 @@ function createStatusWindow() {
   statusWindow.style('font-family', 'monospace');
 }
 
-// 周期表の作成（右下）
 function createPeriodicTable() {
   ptContainer = createDiv('');
   ptContainer.style('position', 'absolute');
   ptContainer.style('bottom', '20px');
   ptContainer.style('right', '20px');
   ptContainer.style('display', 'grid');
-  ptContainer.style('grid-template-columns', 'repeat(18, 24px)'); // 18族
+  ptContainer.style('grid-template-columns', 'repeat(18, 24px)'); 
   ptContainer.style('gap', '2px');
   ptContainer.style('background', 'rgba(0,0,0,0.6)');
   ptContainer.style('padding', '10px');
   ptContainer.style('border-radius', '8px');
 
-  // 原子番号からグリッド位置(行, 列)をマッピング（スズまで50個）
   const layout = [
-    [1, 1, 1], [2, 1, 18], // Z=1,2 (H, He)
-    [3, 2, 1], [4, 2, 2], [5, 2, 13], [6, 2, 14], [7, 2, 15], [8, 2, 16], [9, 2, 17], [10, 2, 18], // Z=3-10
-    [11, 3, 1], [12, 3, 2], [13, 3, 13], [14, 3, 14], [15, 3, 15], [16, 3, 16], [17, 3, 17], [18, 3, 18], // Z=11-18
-    ...Array.from({length: 18}, (_, i) => [19 + i, 4, i + 1]), // Z=19-36
-    ...Array.from({length: 14}, (_, i) => [37 + i, 5, i + 1])  // Z=37-50 (Snまで)
+    [1, 1, 1], [2, 1, 18], 
+    [3, 2, 1], [4, 2, 2], [5, 2, 13], [6, 2, 14], [7, 2, 15], [8, 2, 16], [9, 2, 17], [10, 2, 18], 
+    [11, 3, 1], [12, 3, 2], [13, 3, 13], [14, 3, 14], [15, 3, 15], [16, 3, 16], [17, 3, 17], [18, 3, 18], 
+    ...Array.from({length: 18}, (_, i) => [19 + i, 4, i + 1]), 
+    ...Array.from({length: 14}, (_, i) => [37 + i, 5, i + 1])  
   ];
 
   for (let [z, r, c] of layout) {
@@ -224,30 +205,19 @@ function createPeriodicTable() {
     cell.style('transition', '0.3s all');
     cell.style('box-sizing', 'border-box');
 
-    ptCells[z] = cell; // Z番号で保存しておく
+    ptCells[z] = cell; 
     cell.parent(ptContainer);
   }
 }
 
-// 安定性の情報を取得
 function getStabilityInfo(p, n) {
-  // 原子核が不安定かどうかのフラグはdrawで更新されている
   if (nuclearUnstable) {
-    return {
-      text: "☢️不安定☢️",
-      color: "#ff4444" // 赤
-    };
+    let flash = (unstableFrames > 120 && frameCount % 10 < 5) ? "#ffffff" : "#ff4444";
+    return { text: "☢️不安定☢️", color: flash };
   } else if (p > 0) {
-    return {
-      text: "安定",
-      color: "#44ff44" // 緑
-    };
+    return { text: "安定", color: "#44ff44" };
   } else {
-    // 陽子が0個のときは「安定」とは表示しない
-    return {
-      text: "",
-      color: "white"
-    };
+    return { text: "", color: "white" };
   }
 }
 
@@ -285,10 +255,8 @@ function updateUI(p, n, e) {
     stateText = charge > 0 ? "陽イオン" : "陰イオン";
   }
 
-  // 安定性の情報を取得
   let stabilityInfo = getStabilityInfo(p, n);
   
-  // 指定された順序でHTMLを構成
   statusWindow.html(`
     <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
       <span style="opacity:0.7;">原子</span>
@@ -311,14 +279,9 @@ function updateUI(p, n, e) {
     </div>
   `);
 
-  // --- 周期表のライトアップ処理 ---
-  // 電荷が0の「原子」のときだけ点灯させる
   let isNeutralAtom = (p > 0 && charge === 0);
-
-  // 一旦すべてのセルの色をリセット
   for (let z in ptCells) {
-    if (isNeutralAtom && Number(z) === p) {
-      // 該当する原子が完成したとき（ネオンサインのように光る）
+    if (isNeutralAtom && Number(z) === p && !nuclearUnstable) {
       ptCells[z].style('background', '#44ff44');
       ptCells[z].style('color', '#000');
       ptCells[z].style('border-color', '#44ff44');
@@ -326,7 +289,6 @@ function updateUI(p, n, e) {
       ptCells[z].style('font-weight', 'bold');
       ptCells[z].style('transform', 'scale(1.1)');
     } else {
-      // それ以外（未完成、またはイオン）は消灯
       ptCells[z].style('background', 'rgba(255,255,255,0.05)');
       ptCells[z].style('color', '#666');
       ptCells[z].style('border-color', 'rgba(255,255,255,0.1)');
@@ -337,13 +299,11 @@ function updateUI(p, n, e) {
   }
 }
 
-// --- 粒子操作ロジック ---
+// --- 粒子操作・崩壊ロジック ---
 
 function addParticle(type) {
-  // 核子と電子で出現位置を散らす
   let pos = p5.Vector.random3D().mult(type === 'electron' ? 100 : 60);
   let p = new Particle(pos.x, pos.y, pos.z, type);
-  // 初期速度。接線方向に初速を与えて周回しやすくする
   if (type === 'electron') {
     let velDir = p5.Vector.random3D();
     p.vel = velDir.cross(pos).normalize().mult(8);
@@ -353,14 +313,106 @@ function addParticle(type) {
 
 function removeParticle(type) {
   for (let i = particles.length - 1; i >= 0; i--) {
-    if (particles[i].type === type) {
+    if (particles[i].type === type && !particles[i].isEjected) {
       particles.splice(i, 1);
       break;
     }
   }
 }
 
-// --- 物理計算・安定性 ---
+function checkDecay(z, n) {
+  if (nuclearUnstable) {
+    unstableFrames++;
+    if (unstableFrames > 180) {
+      triggerDecay(z, n);
+      unstableFrames = 0;
+    } else if (unstableFrames % 30 === 0) {
+      for (let p of particles) {
+        if (p.type !== 'electron' && !p.isEjected) {
+          p.vel.add(p5.Vector.random3D().mult(10));
+        }
+      }
+    }
+  } else {
+    unstableFrames = 0; 
+  }
+}
+
+function triggerDecay(P, N) {
+  if (N > P * 2 && P > 0) {
+    doBetaMinusDecay();
+  } else if (P >= 2 && N < P - 0.5) {
+    if (P >= 2 && N >= 2) {
+      doAlphaDecay();
+    } else {
+      doBetaPlusDecay();
+    }
+  }
+}
+
+function doBetaMinusDecay() {
+  let nInfo = particles.find(p => p.type === 'neutron' && !p.isEjected);
+  if (nInfo) {
+    nInfo.type = 'proton';
+    nInfo.charge = 1;
+    nInfo.color = color(255, 50, 50);
+    
+    let e = new Particle(nInfo.pos.x, nInfo.pos.y, nInfo.pos.z, 'electron');
+    e.isEjected = true; 
+    e.vel = p5.Vector.random3D().mult(35); 
+    particles.push(e);
+  }
+}
+
+function doBetaPlusDecay() {
+  let pInfo = particles.find(p => p.type === 'proton' && !p.isEjected);
+  if (pInfo) {
+    pInfo.type = 'neutron';
+    pInfo.charge = 0;
+    pInfo.color = color(150, 150, 150);
+    
+    let pos = new Particle(pInfo.pos.x, pInfo.pos.y, pInfo.pos.z, 'positron');
+    pos.isEjected = true;
+    pos.vel = p5.Vector.random3D().mult(35);
+    particles.push(pos);
+  }
+}
+
+// 【大幅修正】アルファ崩壊時にヘリウムの形を構成させる
+function doAlphaDecay() {
+  let ps = particles.filter(p => p.type === 'proton' && !p.isEjected).slice(0, 2);
+  let ns = particles.filter(p => p.type === 'neutron' && !p.isEjected).slice(0, 2);
+  
+  if (ps.length === 2 && ns.length === 2) {
+    let escapeVel = p5.Vector.random3D().mult(20);
+    let currentDecayId = decayCounter++; 
+    
+    // 選ばれた4つの粒子の中心点を計算
+    let center = createVector(0, 0, 0);
+    let alphaParticles = ps.concat(ns);
+    for (let p of alphaParticles) center.add(p.pos);
+    center.div(4);
+    
+    // 綺麗な四面体（ヘリウム原子核の形）になるように配置オフセットを定義
+    let offsets = [
+      createVector(12, 12, 12),
+      createVector(-12, -12, 12),
+      createVector(-12, 12, -12),
+      createVector(12, -12, -12)
+    ];
+    
+    // 4つの粒子を塊として再配置し、全く同じ速度を与える
+    for (let i = 0; i < 4; i++) {
+      let p = alphaParticles[i];
+      p.isEjected = true; 
+      p.decayId = currentDecayId; 
+      p.pos = p5.Vector.add(center, offsets[i]);
+      p.vel = escapeVel.copy();
+    }
+  }
+}
+
+// --- 物理計算 ---
 
 function calculateAtomicForces(p1, p2) {
   let forceDirection = p5.Vector.sub(p2.pos, p1.pos);
@@ -371,48 +423,46 @@ function calculateAtomicForces(p1, p2) {
   let isNucleon1 = (p1.type === 'proton' || p1.type === 'neutron');
   let isNucleon2 = (p2.type === 'proton' || p2.type === 'neutron');
 
-  // 核子同士（陽子・中性子）の相互作用（桑の実モデル・斥力強化）
   if (isNucleon1 && isNucleon2) {
-    let diam = p1.radius + p2.radius; 
-    let interactionRange = diam * 1.8; 
+    let applyNuclearForce = false;
     
-    if (distance < interactionRange) {
-      let forceMag = 0;
-      if (distance < diam) {
-        // 重なっている場合は反発して押し出し、体積を確保する
-        forceMag = (diam - distance) * 1.5; 
-      } else {
-        // 表面同士が近い場合は引力でくっつく
-        forceMag = (diam - distance) * 0.25; // negative value
-      }
+    if (!p1.isEjected && !p2.isEjected) {
+      applyNuclearForce = true; 
+    } else if (p1.isEjected && p2.isEjected && p1.decayId === p2.decayId) {
+      applyNuclearForce = true; 
       
-      // 不安定な場合に振動を誘発するように、反発力の最大値を大きく設定 (image_1.pngのSn50+などを考慮)
-      forceMag = constrain(forceMag, -8, 30);
-      forceDirection.mult(forceMag);
-      
-      return forceDirection;
+      // 【追加】ヘリウムの形を保つための剛体化処理
+      // クーロン力で陽子だけが押されても、中性子が引っ張られて一緒についていくように速度を強力に同期させる
+      let vDiff = p5.Vector.sub(p2.vel, p1.vel);
+      p1.vel.add(p5.Vector.mult(vDiff, 0.5));
+      p2.vel.sub(p5.Vector.mult(vDiff, 0.5));
     }
-    return createVector(0, 0, 0); 
+
+    if (applyNuclearForce) {
+      let diam = p1.radius + p2.radius; 
+      let interactionRange = diam * 1.8; 
+      
+      if (distance < interactionRange) {
+        let forceMag = 0;
+        if (distance < diam) {
+          forceMag = (diam - distance) * 1.5; 
+        } else {
+          forceMag = (diam - distance) * 0.25; 
+        }
+        
+        forceMag = constrain(forceMag, -8, 30);
+        forceDirection.mult(forceMag);
+        return forceDirection; 
+      }
+      return createVector(0, 0, 0); 
+    }
   }
 
-  // 電子と他の粒子（原子核・電子同士）のクーロン力
-  // 極端に近づいた際のスイングバイを防ぐため、計算上の距離の下限を設ける
+  // クーロン力（電気的な引力・斥力）
   let calcDist = max(distance, 35); 
   let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (calcDist * calcDist);
   forceDirection.mult(cStrength);
   return forceDirection;
-}
-
-// 不安定時の拍動演出
-function checkStability(z, n) {
-  if (nuclearUnstable && frameCount % 60 === 0) {
-    // 不安定判定ルールに該当する場合、1秒に1回、突発的な力を与える
-    for (let p of particles) {
-      if (p.type !== 'electron') {
-        p.vel.add(p5.Vector.random3D().mult(10));
-      }
-    }
-  }
 }
 
 class Particle {
@@ -421,16 +471,21 @@ class Particle {
     this.vel = createVector(0, 0, 0);
     this.acc = createVector(0, 0, 0);
     this.type = type;
+    this.isEjected = false; 
+    this.decayId = 0;
 
     if (type === 'proton') {
       this.charge = 1; this.mass = 10; this.radius = 18;
-      this.color = color(255, 50, 50); // 赤
+      this.color = color(255, 50, 50); 
     } else if (type === 'neutron') {
       this.charge = 0; this.mass = 10; this.radius = 18;
-      this.color = color(150, 150, 150); // グレー
+      this.color = color(150, 150, 150); 
     } else if (type === 'electron') {
       this.charge = -1; this.mass = 1; this.radius = 6;
-      this.color = color(255, 255, 255); // 白
+      this.color = color(255, 255, 255); 
+    } else if (type === 'positron') {
+      this.charge = 1; this.mass = 1; this.radius = 6;
+      this.color = color(255, 100, 200); 
     }
   }
 
@@ -440,13 +495,14 @@ class Particle {
 
   update() {
     this.vel.add(this.acc);
-    if (this.type !== 'electron') {
-      // 核子は摩擦で中心に集まる
-      this.vel.mult(FRICTION); 
+    if (this.type === 'proton' || this.type === 'neutron') {
+      if (!this.isEjected) {
+        this.vel.mult(FRICTION); // 本体の核子は摩擦でまとまる
+      } 
+      // 【修正】飛び散った粒子には摩擦をかけず、慣性で等速直線運動させる（減速しない）
     } else {
-      // 電子は常に「速度8」を保つようにオートクルーズする
       let speed = this.vel.mag();
-      let targetSpeed = 8;
+      let targetSpeed = this.isEjected ? 30 : 8; 
       if (speed > 0.1) {
         this.vel.setMag(speed + (targetSpeed - speed) * 0.1);
       }
@@ -460,11 +516,11 @@ class Particle {
     translate(this.pos.x, this.pos.y, this.pos.z);
     noStroke();
     
-    // 不安定判定の視覚演出（原子核の点滅）
     let currentColor = this.color;
-    if (nuclearUnstable && this.type !== 'electron' && frameCount % 30 < 15) {
-      // 不安定な場合、核子を一時的に黄色く光らせて点滅させる
-      currentColor = color(255, 255, 0); // 黄色
+    if (nuclearUnstable && !this.isEjected && (this.type === 'proton' || this.type === 'neutron')) {
+      if (frameCount % 20 < 10) {
+        currentColor = color(255, 255, 0); 
+      }
     }
     
     fill(currentColor);
