@@ -103,7 +103,6 @@ function draw() {
     p.display();
   }
   
-  // 【修正】一定距離（1000）離れたら静止せずに完全に消去する
   for (let i = particles.length - 1; i >= 0; i--) {
     if (particles[i].isEjected && particles[i].pos.mag() > 1000) {
       particles.splice(i, 1);
@@ -120,12 +119,12 @@ function createControlPanel() {
   let panel = createDiv('');
   panel.style('position', 'absolute');
   panel.style('bottom', '20px');
-  panel.style('left', '35%'); 
+  panel.style('left', '50%'); // 画面中央に配置
   panel.style('transform', 'translateX(-50%)');
   panel.style('display', 'flex');
-  panel.style('gap', '10px');
+  panel.style('gap', '15px');
   panel.style('background', 'rgba(0,0,0,0.6)');
-  panel.style('padding', '15px');
+  panel.style('padding', '15px 25px');
   panel.style('border-radius', '10px');
 
   createGroup(panel, '陽子 (p<sup>+</sup>)', 'proton', '#ff3232');
@@ -141,15 +140,22 @@ function createGroup(parent, label, type, col) {
   let labelDiv = createDiv(label);
   labelDiv.parent(container);
   labelDiv.style('color', col);
-  labelDiv.style('margin-bottom', '5px');
+  labelDiv.style('margin-bottom', '8px');
   labelDiv.style('font-weight', 'bold');
+  labelDiv.style('font-size', '16px');
 
-  let btnAdd = createButton('＋ 追加');
+  let btnAdd = createButton('↑ 追加'); // テキスト変更
   btnAdd.parent(container);
+  btnAdd.style('margin', '0 3px');
+  btnAdd.style('padding', '6px 12px');
+  btnAdd.style('cursor', 'pointer');
   btnAdd.mousePressed(() => addParticle(type));
   
-  let btnRem = createButton('－ 除去');
+  let btnRem = createButton('↓ 除去'); // テキスト変更
   btnRem.parent(container);
+  btnRem.style('margin', '0 3px');
+  btnRem.style('padding', '6px 12px');
+  btnRem.style('cursor', 'pointer');
   btnRem.mousePressed(() => removeParticle(type));
 }
 
@@ -158,13 +164,14 @@ function createStatusWindow() {
   statusWindow.style('position', 'absolute');
   statusWindow.style('top', '20px');
   statusWindow.style('right', '20px');
-  statusWindow.style('width', '180px');
-  statusWindow.style('background', 'rgba(255,255,255,0.1)');
+  statusWindow.style('width', '280px'); // サイズ拡大
+  statusWindow.style('background', 'rgba(0,0,0,0.7)');
   statusWindow.style('color', 'white');
-  statusWindow.style('padding', '20px');
-  statusWindow.style('border', '1px solid rgba(255,255,255,0.3)');
-  statusWindow.style('border-radius', '5px');
+  statusWindow.style('padding', '25px'); // 余白拡大
+  statusWindow.style('border', '2px solid rgba(255,255,255,0.4)');
+  statusWindow.style('border-radius', '8px');
   statusWindow.style('font-family', 'monospace');
+  statusWindow.style('box-shadow', '0 4px 10px rgba(0,0,0,0.5)');
 }
 
 function createPeriodicTable() {
@@ -257,23 +264,24 @@ function updateUI(p, n, e) {
 
   let stabilityInfo = getStabilityInfo(p, n);
   
+  // フォントサイズや行間を拡大して見やすく
   statusWindow.html(`
-    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
-      <span style="opacity:0.7;">原子</span>
+    <div style="display:flex; justify-content:space-between; align-items:center; font-size:16px;">
+      <span style="opacity:0.8;">原子</span>
       <span style="color:${stabilityInfo.color}; font-weight:bold; letter-spacing:-0.5px;">${stabilityInfo.text}</span>
     </div>
-    <div style="font-size:48px; text-align:center; margin:10px 0;">${displaySymbol}</div>
-    <hr style="opacity:0.3">
-    <div style="font-size:14px; line-height:1.6;">
+    <div style="font-size:72px; text-align:center; margin:15px 0; font-weight:bold;">${displaySymbol}</div>
+    <hr style="opacity:0.4; margin-bottom:15px;">
+    <div style="font-size:18px; line-height:1.8;">
       原子番号: ${p}<br>
-      陽子数: ${p}<br>
+      陽子数　: ${p}<br>
       中性子数: ${n}<br>
-      電子数: ${e}<br>
-      質量数: ${p + n}<br>
+      電子数　: ${e}<br>
+      質量数　: ${p + n}<br>
       <span style="color:${charge === 0 ? '#44ff44' : '#ffcc44'}">
-        帯びている電気: ${chargeText}
+        帯電状態: ${chargeText}
       </span><br>
-      <span style="color:#00ffff; font-weight:bold; display:block; margin-top:5px;">
+      <span style="color:#00ffff; font-weight:bold; display:block; margin-top:10px; font-size:22px;">
         状態: ${stateText}
       </span>
     </div>
@@ -378,7 +386,6 @@ function doBetaPlusDecay() {
   }
 }
 
-// 【大幅修正】アルファ崩壊時にヘリウムの形を構成させる
 function doAlphaDecay() {
   let ps = particles.filter(p => p.type === 'proton' && !p.isEjected).slice(0, 2);
   let ns = particles.filter(p => p.type === 'neutron' && !p.isEjected).slice(0, 2);
@@ -387,13 +394,11 @@ function doAlphaDecay() {
     let escapeVel = p5.Vector.random3D().mult(20);
     let currentDecayId = decayCounter++; 
     
-    // 選ばれた4つの粒子の中心点を計算
     let center = createVector(0, 0, 0);
     let alphaParticles = ps.concat(ns);
     for (let p of alphaParticles) center.add(p.pos);
     center.div(4);
     
-    // 綺麗な四面体（ヘリウム原子核の形）になるように配置オフセットを定義
     let offsets = [
       createVector(12, 12, 12),
       createVector(-12, -12, 12),
@@ -401,7 +406,6 @@ function doAlphaDecay() {
       createVector(12, -12, -12)
     ];
     
-    // 4つの粒子を塊として再配置し、全く同じ速度を与える
     for (let i = 0; i < 4; i++) {
       let p = alphaParticles[i];
       p.isEjected = true; 
@@ -431,8 +435,6 @@ function calculateAtomicForces(p1, p2) {
     } else if (p1.isEjected && p2.isEjected && p1.decayId === p2.decayId) {
       applyNuclearForce = true; 
       
-      // 【追加】ヘリウムの形を保つための剛体化処理
-      // クーロン力で陽子だけが押されても、中性子が引っ張られて一緒についていくように速度を強力に同期させる
       let vDiff = p5.Vector.sub(p2.vel, p1.vel);
       p1.vel.add(p5.Vector.mult(vDiff, 0.5));
       p2.vel.sub(p5.Vector.mult(vDiff, 0.5));
@@ -458,7 +460,6 @@ function calculateAtomicForces(p1, p2) {
     }
   }
 
-  // クーロン力（電気的な引力・斥力）
   let calcDist = max(distance, 35); 
   let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (calcDist * calcDist);
   forceDirection.mult(cStrength);
@@ -497,9 +498,8 @@ class Particle {
     this.vel.add(this.acc);
     if (this.type === 'proton' || this.type === 'neutron') {
       if (!this.isEjected) {
-        this.vel.mult(FRICTION); // 本体の核子は摩擦でまとまる
+        this.vel.mult(FRICTION); 
       } 
-      // 【修正】飛び散った粒子には摩擦をかけず、慣性で等速直線運動させる（減速しない）
     } else {
       let speed = this.vel.mag();
       let targetSpeed = this.isEjected ? 30 : 8; 
