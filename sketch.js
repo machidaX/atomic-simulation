@@ -1,6 +1,6 @@
 /**
  * 原子モデル・学習シミュレーター
- * （電子の落下防止バリア ＆ UI拡大版）
+ * （UI左右配置 ＆ 視認性向上版）
  */
 
 let particles = [];
@@ -120,8 +120,7 @@ function createControlPanel() {
   let panel = createDiv('');
   panel.style('position', 'absolute');
   panel.style('bottom', '20px');
-  panel.style('left', '50%'); 
-  panel.style('transform', 'translateX(-50%)');
+  panel.style('right', '20px'); // 右下に配置変更
   panel.style('display', 'flex');
   panel.style('gap', '15px');
   panel.style('background', 'rgba(0,0,0,0.6)');
@@ -145,14 +144,14 @@ function createGroup(parent, label, type, col) {
   labelDiv.style('font-weight', 'bold');
   labelDiv.style('font-size', '16px');
 
-  let btnAdd = createButton('↑ 追加'); 
+  let btnAdd = createButton('🔼 追加'); // 見やすい記号に変更
   btnAdd.parent(container);
   btnAdd.style('margin', '0 3px');
   btnAdd.style('padding', '6px 12px');
   btnAdd.style('cursor', 'pointer');
   btnAdd.mousePressed(() => addParticle(type));
   
-  let btnRem = createButton('↓ 除去'); 
+  let btnRem = createButton('🔽 除去'); // 見やすい記号に変更
   btnRem.parent(container);
   btnRem.style('margin', '0 3px');
   btnRem.style('padding', '6px 12px');
@@ -179,7 +178,7 @@ function createPeriodicTable() {
   ptContainer = createDiv('');
   ptContainer.style('position', 'absolute');
   ptContainer.style('bottom', '20px');
-  ptContainer.style('right', '20px');
+  ptContainer.style('left', '20px'); // 左下に配置変更
   ptContainer.style('display', 'grid');
   ptContainer.style('grid-template-columns', 'repeat(18, 24px)'); 
   ptContainer.style('gap', '2px');
@@ -465,15 +464,14 @@ function calculateAtomicForces(p1, p2) {
   let calcDist = max(distance, 35); 
   let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (calcDist * calcDist);
   
-  // 【追加】電子が原子核に落下するのを防ぐ「量子バリア（パウリの排他原理的な斥力）」
+  // 電子が原子核に落下するのを防ぐ「量子バリア（パウリの排他原理的な斥力）」
   let isP1Electron = (p1.type === 'electron' || p1.type === 'positron');
   let isP2Electron = (p2.type === 'electron' || p2.type === 'positron');
   
   if ((isP1Electron && isNucleon2) || (isP2Electron && isNucleon1)) {
-    // 距離が90未満になると、近づくほど急激に強くなる反発力を加算する
     if (distance < 90) {
       let repulsion = (90 - distance) * 0.008; 
-      cStrength += repulsion; // 引力（マイナス）に強い反発力（プラス）を足し合わせてキャンセル
+      cStrength += repulsion; 
     }
   }
 
