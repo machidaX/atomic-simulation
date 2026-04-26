@@ -1,5 +1,6 @@
 /**
- * 原子モデル・学習シミュレーター（GitHub公開版）
+ * 原子モデル・学習シミュレーター
+ * （電子の落下防止バリア ＆ UI拡大版）
  */
 
 let particles = [];
@@ -119,7 +120,7 @@ function createControlPanel() {
   let panel = createDiv('');
   panel.style('position', 'absolute');
   panel.style('bottom', '20px');
-  panel.style('left', '50%'); // 画面中央に配置
+  panel.style('left', '50%'); 
   panel.style('transform', 'translateX(-50%)');
   panel.style('display', 'flex');
   panel.style('gap', '15px');
@@ -144,14 +145,14 @@ function createGroup(parent, label, type, col) {
   labelDiv.style('font-weight', 'bold');
   labelDiv.style('font-size', '16px');
 
-  let btnAdd = createButton('↑ 追加'); // テキスト変更
+  let btnAdd = createButton('↑ 追加'); 
   btnAdd.parent(container);
   btnAdd.style('margin', '0 3px');
   btnAdd.style('padding', '6px 12px');
   btnAdd.style('cursor', 'pointer');
   btnAdd.mousePressed(() => addParticle(type));
   
-  let btnRem = createButton('↓ 除去'); // テキスト変更
+  let btnRem = createButton('↓ 除去'); 
   btnRem.parent(container);
   btnRem.style('margin', '0 3px');
   btnRem.style('padding', '6px 12px');
@@ -164,10 +165,10 @@ function createStatusWindow() {
   statusWindow.style('position', 'absolute');
   statusWindow.style('top', '20px');
   statusWindow.style('right', '20px');
-  statusWindow.style('width', '280px'); // サイズ拡大
+  statusWindow.style('width', '280px'); 
   statusWindow.style('background', 'rgba(0,0,0,0.7)');
   statusWindow.style('color', 'white');
-  statusWindow.style('padding', '25px'); // 余白拡大
+  statusWindow.style('padding', '25px'); 
   statusWindow.style('border', '2px solid rgba(255,255,255,0.4)');
   statusWindow.style('border-radius', '8px');
   statusWindow.style('font-family', 'monospace');
@@ -264,7 +265,6 @@ function updateUI(p, n, e) {
 
   let stabilityInfo = getStabilityInfo(p, n);
   
-  // フォントサイズや行間を拡大して見やすく
   statusWindow.html(`
     <div style="display:flex; justify-content:space-between; align-items:center; font-size:16px;">
       <span style="opacity:0.8;">原子</span>
@@ -427,6 +427,7 @@ function calculateAtomicForces(p1, p2) {
   let isNucleon1 = (p1.type === 'proton' || p1.type === 'neutron');
   let isNucleon2 = (p2.type === 'proton' || p2.type === 'neutron');
 
+  // 核力の計算
   if (isNucleon1 && isNucleon2) {
     let applyNuclearForce = false;
     
@@ -460,8 +461,22 @@ function calculateAtomicForces(p1, p2) {
     }
   }
 
+  // クーロン力（電気的な引力・斥力）
   let calcDist = max(distance, 35); 
   let cStrength = (COULOMB_CONST * p1.charge * p2.charge) / (calcDist * calcDist);
+  
+  // 【追加】電子が原子核に落下するのを防ぐ「量子バリア（パウリの排他原理的な斥力）」
+  let isP1Electron = (p1.type === 'electron' || p1.type === 'positron');
+  let isP2Electron = (p2.type === 'electron' || p2.type === 'positron');
+  
+  if ((isP1Electron && isNucleon2) || (isP2Electron && isNucleon1)) {
+    // 距離が90未満になると、近づくほど急激に強くなる反発力を加算する
+    if (distance < 90) {
+      let repulsion = (90 - distance) * 0.008; 
+      cStrength += repulsion; // 引力（マイナス）に強い反発力（プラス）を足し合わせてキャンセル
+    }
+  }
+
   forceDirection.mult(cStrength);
   return forceDirection;
 }
