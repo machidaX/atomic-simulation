@@ -278,7 +278,7 @@ function updateUI(p, n, e) {
       電子数　: ${e}<br>
       質量数　: ${p + n}<br>
       <span style="color:${charge === 0 ? '#44ff44' : '#ffcc44'}">
-        帯電状態: ${chargeText}
+        帯びている電気: ${chargeText}
       </span><br>
       <span style="color:#00ffff; font-weight:bold; display:block; margin-top:10px; font-size:22px;">
         状態: ${stateText}
